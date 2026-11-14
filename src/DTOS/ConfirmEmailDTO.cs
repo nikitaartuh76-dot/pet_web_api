@@ -1,0 +1,1 @@
+﻿public record ConfirmEmailDTO(string Email, string Token);

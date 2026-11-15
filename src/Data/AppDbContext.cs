@@ -21,6 +21,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
             entity.Property(lesson => lesson.Capacity).IsRequired();
             entity.Property(lesson => lesson.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(lesson => new { lesson.Status, lesson.StartDate });
+            entity.HasOne<ApplicationUser>(l => l.Creator)
+                .WithMany()
+                .HasForeignKey(lesson => lesson.CreatorId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<ApplicationUser>(l => l.Host)
+                .WithMany()
+                .HasForeignKey(lesson => lesson.HostId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

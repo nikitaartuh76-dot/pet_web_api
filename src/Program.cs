@@ -5,8 +5,10 @@ using ASP_FINAL_PROJECT.Entities;
 using ASP_FINAL_PROJECT.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,20 +53,49 @@ builder.Services.AddAuthentication(AuthOpts =>
 
 
     };
+})
+.AddJwtBearer(JwtOpts =>
+{
+    var signingKey = builder.Configuration["Jwt:SigningKey"]
+        ?? throw new InvalidOperationException(
+            "JWT signing key is not configured.");
+
+    JwtOpts.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Convert.FromBase64String(signingKey)),
+
+        ValidateIssuer = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+
+        ValidateAudience = true,
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+
+        ValidateLifetime = true,
+        RequireExpirationTime = true,
+
+        ClockSkew = TimeSpan.Zero
+    };
 });
 
 
 builder.Services.AddAuthorization(authOpts =>
 {
-    authOpts.AddPolicy("AdminOnly", policyBuilder =>
+    authOpts.AddPolicy("CanPublishLessons", policy => policy.RequireClaim("permission", "lessons.publish"));
+    authOpts.AddPolicy("LessonOwner", policy =>
     {
-        policyBuilder.RequireRole("Administrator");
+        policy.AddRequirements(new LessonOwnerRequirement());
+        policy.RequireAuthenticatedUser();
     });
-    authOpts.AddPolicy("CanPublishLessons", policy =>
+    authOpts.AddPolicy("AdminPublish", policyBuilder =>
     {
-        policy.RequireClaim("permission", "lessons-publish");
+        policyBuilder.AddRequirements(new AdminPublishRequirement());
+        policyBuilder.RequireAuthenticatedUser();
     });
 });
+builder.Services.AddScoped<IAuthorizationHandler, LessonOwnerHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, AdminPublishHandler>();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 builder.Services.AddScoped<ICatalogService, CatalogService>();
@@ -72,12 +103,6 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateAsyncScope())
-{
-    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-    var ivan = await userManager.FindByEmailAsync("ivan_test@example.com");
-    await userManager.AddToRoleAsync(ivan, "Organizer");
-}
 
 app.UseAuthentication();
 app.UseAuthorization();

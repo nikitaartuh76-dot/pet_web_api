@@ -10,13 +10,14 @@ public interface ICatalogService
         DateTime? to,
         CancellationToken cancellationToken);
 
-    Task<Lesson?> GetLessonAsync(int id, CancellationToken cancellationToken);
+    Task<Lesson?> GetLessonAsync(Guid id, CancellationToken cancellationToken);
 
-    Task<Lesson> CreateLessonAsync(PostLessonDTO request, CancellationToken cancellationToken);
+    Task<Lesson> CreateLessonAsync(PostLessonDTO request, string creatorId, CancellationToken cancellationToken);
 
-    Task<Lesson?> UpdateLessonAsync(int id, UpdateLessonDTO request, CancellationToken cancellationToken);
+    Task<Lesson?> UpdateLessonAsync(Guid id, UpdateLessonDTO request, CancellationToken cancellationToken);
 
-    Task<bool> DeleteLessonAsync(int id, CancellationToken cancellationToken);
+    Task<bool> DeleteLessonAsync(Guid id, CancellationToken cancellationToken);
+    Task<Lesson?> GetLessonForManagementAsync(Guid id, CancellationToken cancellationToken);
 
-    Task<Lesson?> ChangeStatusAsync(int id, LessonStatus status, CancellationToken cancellationToken);
+    Task<Lesson> ChangeStatusAsync(Lesson lesson, LessonStatus status, CancellationToken cancellationToken);
 }

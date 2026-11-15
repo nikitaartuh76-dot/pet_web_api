@@ -2,8 +2,16 @@ using ASP_FINAL_PROJECT.DTOS;
 using ASP_FINAL_PROJECT.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security;
+using System.Security.Claims;
+using System.Text;
 
 namespace ASP_FINAL_PROJECT
 {
@@ -42,7 +50,7 @@ namespace ASP_FINAL_PROJECT
             group.MapPost("/confirm-email", async (ConfirmEmailDTO dto, UserManager<ApplicationUser> userManager) =>
             {
                 var user = await userManager.FindByEmailAsync(dto.Email);
-                
+
                 if (user != null)
                 {
                     var confirmResult = await userManager.ConfirmEmailAsync(user, dto.Token);
@@ -86,7 +94,7 @@ namespace ASP_FINAL_PROJECT
                     {
                         return Results.Problem(statusCode: 401, detail: "Email не подтверждён");
                     }
-                    else 
+                    else
                     {
                         return Results.Problem("Неверный пароль", statusCode: 401);
                     }
@@ -148,7 +156,7 @@ namespace ASP_FINAL_PROJECT
                 {
                     var token = await userManager.GeneratePasswordResetTokenAsync(user);
                     await sender.SendAsync(user.Email!, $"Ссылка для сброса пароля", $"Нажмите на ссылку чтобы сбросить старый пароль, {dto.Email} , {token}");
-                    return Results.Ok(new { Message = "Если Email существует, проверьте его, там лежит ссылка для сброса пароля"});
+                    return Results.Ok(new { Message = "Если Email существует, проверьте его, там лежит ссылка для сброса пароля" });
                 }
                 else return Results.Ok(new { Message = "Если Email существует, проверьте его, там лежит ссылка для сброса пароля" });
             });
@@ -182,6 +190,39 @@ namespace ASP_FINAL_PROJECT
                     return Results.Conflict("Учётной записи не существует");
                 }
             });
+            group.MapPost("/token", async (PostAuthZDTO dto, UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager, IConfiguration config) =>
+            {
+                var user = await userManager.FindByEmailAsync(dto.Email);
+                if (user is not null)
+                {
+                    signInManager.AuthenticationScheme = JwtBearerDefaults.AuthenticationScheme;
+                    var res = await signInManager.CheckPasswordSignInAsync(user, dto.Password, true);
+                    if (res.Succeeded)
+                    {
+                        var key = new SymmetricSecurityKey((Encoding.UTF8.GetBytes(config["Jwt:Key"])));
+                        var descriptor = new SecurityTokenDescriptor
+                        {
+                            Subject = new ClaimsIdentity(new[] { new Claim("sub", user.Id) }),
+                            Issuer = config["Jwt:Issuer"],
+                            Audience = config["Jwt:Audience"],
+                            Expires = DateTime.UtcNow.AddMinutes(15),
+                            SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
+                        };
+                        var token = new JsonWebTokenHandler().CreateToken(descriptor);
+                        return Results.Ok(token);
+                    }
+                    else
+                    {
+                        return Results.Challenge();
+                    }
+                }
+                return Results.Unauthorized();
+            }).RequireAuthorization(policy =>
+            {
+                policy.RequireAuthenticatedUser();
+                policy.AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme);
+            });
+
             return group;
         }
 

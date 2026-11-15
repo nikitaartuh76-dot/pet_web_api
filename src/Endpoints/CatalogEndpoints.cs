@@ -1,9 +1,8 @@
-using ASP_FINAL_PROJECT.Data;
 using ASP_FINAL_PROJECT.DTOS;
 using ASP_FINAL_PROJECT.Entities;
 using ASP_FINAL_PROJECT.Services;
-using Microsoft.AspNetCore.Mvc;
-using OpenTelemetry.Trace;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace ASP_FINAL_PROJECT.Endpoints;
 
@@ -31,8 +30,8 @@ public static class CatalogEndpoints
             return Results.Ok(lessons);
         });
 
-        group.MapGet("/lessons/{id:int}", async (
-            int id,
+        group.MapGet("/lessons/{id:guid}", async (
+            Guid id,
             ICatalogService catalog,
             CancellationToken cancellationToken) =>
         {
@@ -43,12 +42,16 @@ public static class CatalogEndpoints
 
         group.MapPost("/lessons", async (
             PostLessonDTO request,
+            HttpContext httpContext,
             ICatalogService catalog,
             CancellationToken cancellationToken) =>
         {
+            var creatorId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(creatorId)) return Results.Unauthorized();
+
             try
             {
-                var lesson = await catalog.CreateLessonAsync(request, cancellationToken);
+                var lesson = await catalog.CreateLessonAsync(request, creatorId, cancellationToken);
                 return Results.CreatedAtRoute(
                     "GetLessonById",
                     new { id = lesson.Id },
@@ -63,8 +66,8 @@ public static class CatalogEndpoints
             }
         }).RequireAuthorization("CanPublishLessons");
 
-        group.MapPut("/lessons/{id:int}", async (
-            int id,
+        group.MapPut("/lessons/{id:guid}", async (
+            Guid id,
             UpdateLessonDTO request,
             ICatalogService catalog,
             CancellationToken cancellationToken) =>
@@ -83,8 +86,8 @@ public static class CatalogEndpoints
             }
         }).RequireAuthorization("CanPublishLessons");
 
-        group.MapDelete("/lessons/{id:int}", async (
-            int id,
+        group.MapDelete("/lessons/{id:guid}", async (
+            Guid id,
             ICatalogService catalog,
             CancellationToken cancellationToken) =>
         {
@@ -92,11 +95,11 @@ public static class CatalogEndpoints
             return deleted ? Results.NoContent() : Results.NotFound();
         }).RequireAuthorization("CanPublishLessons");
 
-        group.MapPatch("/lessons/{id:int}/status", async (
-            int id,
+        group.MapPatch("/lessons/{id:guid}/status", async (
+            Guid id,
             ChangeLessonStatusDTO request,
             ICatalogService catalog,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken, IAuthorizationService auth, HttpContext ctx) =>
         {
             if (!Enum.IsDefined(request.Status))
             {
@@ -105,11 +108,21 @@ public static class CatalogEndpoints
                     ["status"] = ["The requested status is not valid."]
                 });
             }
-
             try
             {
-                var lesson = await catalog.ChangeStatusAsync(id, request.Status, cancellationToken);
-                return lesson is null ? Results.NotFound() : Results.Ok(lesson);
+                var lesson = await catalog.GetLessonForManagementAsync(id, cancellationToken);
+                if (lesson is null) return Results.NotFound();
+                var authResult = await auth.AuthorizeAsync(ctx.User, lesson, "LessonOwner");
+                var authResult2 = await auth.AuthorizeAsync(ctx.User, "AdminPublish");
+                if (authResult.Succeeded || authResult2.Succeeded)
+                {
+                    var lessonCh = await catalog.ChangeStatusAsync(lesson, request.Status, cancellationToken);
+                    return Results.Ok(lessonCh);
+                }
+                else
+                {
+                    return Results.Forbid();
+                }
             }
             catch (InvalidOperationException exception)
             {
@@ -117,21 +130,28 @@ public static class CatalogEndpoints
             }
         }).RequireAuthorization("CanPublishLessons");
 
-        group.MapPatch("/lessons/{id:int}/publish", async (int id, ICatalogService service, CancellationToken token) =>
+        group.MapPatch("/lessons/{id:guid}/publish", async (Guid id, ICatalogService service, CancellationToken token, HttpContext ctx, IAuthorizationService auth) =>
         {
             try
             {
-                var lesson = await service.ChangeStatusAsync(id, LessonStatus.Published, token);
-                if (lesson is not null)
+                var lesson = await service.GetLessonForManagementAsync(id, token);
+                if (lesson is null)
                 {
-                   return Results.Ok(lesson);
+                    return Results.NotFound();
                 }
                 else
                 {
-                   return Results.Problem(detail: "No such lesson in catalog", statusCode: 404);
+                    var authResult = await auth.AuthorizeAsync(ctx.User, lesson, "LessonOwner");
+                    if (authResult.Succeeded)
+                    {
+                        await service.ChangeStatusAsync(lesson, LessonStatus.Published, token);
+                        return Results.Ok(lesson);
+                    }
+
+                    else { return Results.Forbid(); }
                 }
             }
-            catch(InvalidOperationException ex)
+            catch (InvalidOperationException ex)
             {
                 return Results.Conflict(ex.Message);
             }

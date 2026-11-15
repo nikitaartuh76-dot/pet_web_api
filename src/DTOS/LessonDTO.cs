@@ -3,7 +3,7 @@ using ASP_FINAL_PROJECT.Entities;
 namespace ASP_FINAL_PROJECT.DTOS;
 
 public sealed record PostLessonDTO(
-    int HostId,
+    string HostId,
     string Name,
     string Description,
     DateTime StartDate,

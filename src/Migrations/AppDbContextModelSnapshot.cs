@@ -88,11 +88,9 @@ namespace ASP_FINAL_PROJECT.Migrations
 
             modelBuilder.Entity("ASP_FINAL_PROJECT.Entities.Lesson", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Address")
                         .IsRequired()
@@ -105,6 +103,10 @@ namespace ASP_FINAL_PROJECT.Migrations
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CreatorId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(4000)
@@ -113,8 +115,9 @@ namespace ASP_FINAL_PROJECT.Migrations
                     b.Property<DateTime>("EndDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("HostId")
-                        .HasColumnType("integer");
+                    b.Property<string>("HostId")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("LastModifiedDate")
                         .HasColumnType("timestamp with time zone");
@@ -134,6 +137,10 @@ namespace ASP_FINAL_PROJECT.Migrations
 
                     b.HasKey("Id")
                         .HasName("lesson_pk");
+
+                    b.HasIndex("CreatorId");
+
+                    b.HasIndex("HostId");
 
                     b.HasIndex("Status", "StartDate");
 
@@ -270,6 +277,25 @@ namespace ASP_FINAL_PROJECT.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
+                });
+
+            modelBuilder.Entity("ASP_FINAL_PROJECT.Entities.Lesson", b =>
+                {
+                    b.HasOne("ASP_FINAL_PROJECT.Entities.ApplicationUser", "Creator")
+                        .WithMany()
+                        .HasForeignKey("CreatorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ASP_FINAL_PROJECT.Entities.ApplicationUser", "Host")
+                        .WithMany()
+                        .HasForeignKey("HostId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Creator");
+
+                    b.Navigation("Host");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

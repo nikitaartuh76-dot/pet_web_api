@@ -31,8 +31,12 @@ public sealed class CatalogService(AppDbContext dbContext) : ICatalogService
             .ThenBy(lesson => lesson.Id)
             .ToListAsync(cancellationToken);
     }
-
-    public Task<Lesson?> GetLessonAsync(int id, CancellationToken cancellationToken)
+    public Task<Lesson?> GetLessonForManagementAsync(Guid id, CancellationToken token)
+    {
+        return dbContext.Lessons.FirstOrDefaultAsync(l => l.Id == id, token);
+        
+    }
+    public Task<Lesson?> GetLessonAsync(Guid id, CancellationToken cancellationToken)
     {
         return dbContext.Lessons
             .AsNoTracking()
@@ -42,13 +46,14 @@ public sealed class CatalogService(AppDbContext dbContext) : ICatalogService
     }
 
     public async Task<Lesson> CreateLessonAsync(
-        PostLessonDTO request,
+        PostLessonDTO request, string creatorId,
         CancellationToken cancellationToken)
     {
         ValidateSchedule(request.StartDate, request.EndDate, request.Capacity);
 
         var lesson = new Lesson
         {
+            CreatorId = creatorId,
             HostId = request.HostId,
             Name = request.Name.Trim(),
             Description = request.Description.Trim(),
@@ -67,7 +72,7 @@ public sealed class CatalogService(AppDbContext dbContext) : ICatalogService
     }
 
     public async Task<Lesson?> UpdateLessonAsync(
-        int id,
+        Guid id,
         UpdateLessonDTO request,
         CancellationToken cancellationToken)
     {
@@ -93,7 +98,7 @@ public sealed class CatalogService(AppDbContext dbContext) : ICatalogService
         return lesson;
     }
 
-    public async Task<bool> DeleteLessonAsync(int id, CancellationToken cancellationToken)
+    public async Task<bool> DeleteLessonAsync(Guid id, CancellationToken cancellationToken)
     {
         var lesson = await dbContext.Lessons
             .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
@@ -108,19 +113,11 @@ public sealed class CatalogService(AppDbContext dbContext) : ICatalogService
         return true;
     }
 
-    public async Task<Lesson?> ChangeStatusAsync(
-        int id,
+    public async Task<Lesson> ChangeStatusAsync(
+        Lesson lesson,
         LessonStatus status,
         CancellationToken cancellationToken)
     {
-        var lesson = await dbContext.Lessons
-            .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
-
-        if (lesson is null)
-        {
-            return null;
-        }
-
         var canTransition = lesson.Status == LessonStatus.Draft
             && status is LessonStatus.Published or LessonStatus.Cancelled
             || lesson.Status == LessonStatus.Published

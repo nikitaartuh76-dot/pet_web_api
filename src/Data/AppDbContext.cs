@@ -7,7 +7,7 @@ namespace ASP_FINAL_PROJECT.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbContext<ApplicationUser>(options)
 {
     public DbSet<Lesson> Lessons => Set<Lesson>();
-
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -30,6 +30,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
                 .WithMany()
                 .HasForeignKey(lesson => lesson.HostId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasKey(token => token.TokenHash);
+            entity.Property(token => token.TokenHash).HasMaxLength(64);
+
+            entity.HasOne<ApplicationUser>(token => token.User)
+                .WithMany()
+                .HasForeignKey(token => token.UserId);
         });
     }
 }

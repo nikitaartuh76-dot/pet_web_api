@@ -4,7 +4,8 @@ using ASP_FINAL_PROJECT.Endpoints;
 using ASP_FINAL_PROJECT.Entities;
 using ASP_FINAL_PROJECT.Services;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -30,36 +31,27 @@ builder.Services
     .AddSignInManager()
     .AddDefaultTokenProviders();
 builder.Services.AddScoped<EmailService>();
+builder.Services.AddScoped<RefreshTokenService>();
 builder.Host.UseSerilog((ctx, config) =>
 {
     config.ReadFrom.Configuration(ctx.Configuration.GetSection("Serilog"));
 });
-builder.Services.AddAuthentication(AuthOpts =>
-{
-    AuthOpts.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-
-}).AddCookie(opts =>
-{
-    opts.Events.OnValidatePrincipal = async context =>
-    {
-        var signInManager = context.HttpContext.RequestServices.GetRequiredService<SignInManager<ApplicationUser>>();
-        var principal = context.Principal;
-        var user = await signInManager.ValidateSecurityStampAsync(principal);
-        if (user is null)
-        {
-            context.RejectPrincipal();
-            await context.HttpContext.SignOutAsync("Cookies");
-        }
-
-
-    };
-})
+builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 .AddJwtBearer(JwtOpts =>
 {
     var signingKey = builder.Configuration["Jwt:SigningKey"]
         ?? throw new InvalidOperationException(
             "JWT signing key is not configured.");
 
+    JwtOpts.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            context.Token = context.Request.Cookies["access_token"];
+            return Task.CompletedTask;
+        }
+    };
     JwtOpts.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuerSigningKey = true,
@@ -82,6 +74,7 @@ builder.Services.AddAuthentication(AuthOpts =>
 
 builder.Services.AddAuthorization(authOpts =>
 {
+    authOpts.AddPolicy("OrganizerOnly", policy => policy.RequireRole("Organizer"));
     authOpts.AddPolicy("CanPublishLessons", policy => policy.RequireClaim("permission", "lessons.publish"));
     authOpts.AddPolicy("LessonOwner", policy =>
     {
@@ -105,6 +98,24 @@ var app = builder.Build();
 
 
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+    var protectedRequest = path.StartsWithSegments("/catalog") ||
+        path == "/auth/login" || path == "/auth/logout" ||
+        path == "/auth/change-password" || path == "/auth/refresh";
+    if (protectedRequest && !HttpMethods.IsGet(context.Request.Method) &&
+        !HttpMethods.IsHead(context.Request.Method) && !HttpMethods.IsOptions(context.Request.Method))
+    {
+        var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
+        if (!await antiforgery.IsRequestValidAsync(context))
+        {
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+    }
+    await next();
+});
 app.UseAuthorization();
 
 app.MapOpenApi();

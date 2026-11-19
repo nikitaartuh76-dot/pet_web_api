@@ -92,6 +92,7 @@ builder.Services.AddScoped<IAuthorizationHandler, AdminPublishHandler>();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 builder.Services.AddScoped<ICatalogService, CatalogService>();
+builder.Services.AddScoped<LessonRegistrationService>();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -120,6 +121,7 @@ app.UseAuthorization();
 
 app.MapOpenApi();
 app.MapCatalogEndpoints();
+app.MapLessonRegistrationEndpoints();
 app.MapAuth();
 
 app.Run();

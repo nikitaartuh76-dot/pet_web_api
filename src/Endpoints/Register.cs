@@ -1,10 +1,8 @@
-using ASP_FINAL_PROJECT.Entities;
 using ASP_FINAL_PROJECT.DTOS;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
-using System.Security.Cryptography;
 
 namespace ASP_FINAL_PROJECT
 {
@@ -84,20 +82,32 @@ namespace ASP_FINAL_PROJECT
                 context.Response.Headers.CacheControl = "no-store";
                 context.Response.Cookies.Append("access_token", jwt, new CookieOptions
                 {
-                    HttpOnly = true, Secure = true, SameSite = SameSiteMode.Strict,
-                    Path = "/", MaxAge = TimeSpan.FromMinutes(15)
+                    HttpOnly = true,
+                    Secure = true,
+                    SameSite = SameSiteMode.Strict,
+                    Path = "/",
+                    MaxAge = TimeSpan.FromMinutes(15)
                 });
                 context.Response.Cookies.Append("refresh_token", rawToken, new CookieOptions
                 {
-                    HttpOnly = true, Secure = true, SameSite = SameSiteMode.Strict,
-                    Path = "/", MaxAge = TimeSpan.FromDays(7)
+                    HttpOnly = true,
+                    Secure = true,
+                    SameSite = SameSiteMode.Strict,
+                    Path = "/",
+                    MaxAge = TimeSpan.FromDays(7)
                 });
                 return Results.Ok();
-            });
+            }).WithName("login");
 
-            group.MapPost("/logout", (HttpContext context) =>
+            group.MapPost("/logout", async (HttpContext context, RefreshTokenService service, CancellationToken cancellationToken) =>
             {
-                context.Response.Cookies.Delete("access_token", new CookieOptions { Path = "/", Secure = true, HttpOnly = true, SameSite = SameSiteMode.Strict });
+            context.Response.Cookies.Delete("access_token", new CookieOptions { Path = "/", Secure = true, HttpOnly = true, SameSite = SameSiteMode.Strict });
+                var token = context.Request.Cookies["refresh_token"];
+                if (!string.IsNullOrEmpty(token))
+                {
+                    await service.RevokeSessionTokenAsync(token, cancellationToken);
+                }
+                context.Response.Cookies.Delete("refresh_token", new CookieOptions { Path = "/", Secure = true, HttpOnly = true, SameSite = SameSiteMode.Strict });
                 return Results.Ok();
             });
 
@@ -182,18 +192,45 @@ namespace ASP_FINAL_PROJECT
                     return Results.Conflict("Учётной записи не существует");
                 }
             });
-            group.MapPost("/refresh", async (HttpContext ctx, RefreshTokenDTO token, CancellationToken cancellationToken, RefreshTokenService service, IConfiguration config) =>
+            group.MapPost("/refresh", async (HttpContext context, CancellationToken cancellationToken,
+                RefreshTokenService service, IConfiguration config, UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager) =>
             {
-                await service.MarkTokenUsedAsync(token.Token);
-                ctx.Response.Cookies.Delete("refresh_token");
-                ctx.Response.Cookies.Delete("access_token");
-                var accessToken = service.CreateAccessToken(ctx.User, config);
-                var refreshToken = await service.CreateRefreshTokenAsync(ctx.User.FindFirstValue(ClaimTypes.NameIdentifier)!,cancellationToken);
-                ctx.Response.Cookies.Append("access_token", accessToken);
-                ctx.Response.Cookies.Append("refresh_token", refreshToken);
-                return Results.Ok();
+                var token = context.Request.Cookies["refresh_token"];
+                if (string.IsNullOrEmpty(token)) return Results.Unauthorized();
 
-            }).RequireAuthorization();
+                {
+                    var tokenDto = await service.RefreshTokenAsync(token, cancellationToken);
+                    if (tokenDto is null) return Results.Unauthorized();
+                    var user = await userManager.FindByIdAsync(tokenDto.UserId);
+                    if (user == null) return Results.Unauthorized();
+                    var principal = await signInManager.CreateUserPrincipalAsync(user);
+                    var accessToken = service.CreateAccessToken(principal, config);
+
+
+                    context.Response.Headers.CacheControl = "no-store";
+                    context.Response.Cookies.Append("access_token", accessToken, new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Secure = true,
+                        SameSite = SameSiteMode.Strict,
+                        Path = "/",
+                        MaxAge = TimeSpan.FromMinutes(15)
+                    });
+                    context.Response.Cookies.Append("refresh_token", tokenDto.rawToken, new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Secure = true,
+                        SameSite = SameSiteMode.Strict,
+                        Path = "/",
+                        MaxAge = TimeSpan.FromDays(7)
+                    });
+                    return Results.Ok();
+                }
+
+
+
+
+            });
             return group;
         }
 

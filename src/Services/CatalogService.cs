@@ -78,13 +78,20 @@ public sealed class CatalogService(AppDbContext dbContext) : ICatalogService
     {
         ValidateSchedule(request.StartDate, request.EndDate, request.Capacity);
 
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var lesson = await dbContext.Lessons
-            .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+            .FromSqlInterpolated($"SELECT * FROM \"Lessons\" WHERE \"Id\" = {id} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken);
 
         if (lesson is null || lesson.Status == LessonStatus.Cancelled)
         {
             return null;
         }
+
+        var registeredCount = await dbContext.LessonRegistrations.CountAsync(item =>
+            item.LessonId == id && item.Status == RegistrationStatus.Registered, cancellationToken);
+        if (request.Capacity < registeredCount)
+            throw new ArgumentException("Capacity cannot be less than the number of registered users.");
 
         lesson.Name = request.Name.Trim();
         lesson.Description = request.Description.Trim();
@@ -95,6 +102,7 @@ public sealed class CatalogService(AppDbContext dbContext) : ICatalogService
         lesson.LastModifiedDate = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return lesson;
     }
 

@@ -8,6 +8,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
 {
     public DbSet<Lesson> Lessons => Set<Lesson>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<LessonRegistry> LessonRegistrations => Set<LessonRegistry>();
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -30,6 +31,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
                 .WithMany()
                 .HasForeignKey(lesson => lesson.HostId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<LessonRegistry>(entity =>
+        {
+            entity.HasKey(item => new { item.LessonId, item.UserId });
+            entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(20);
+            entity.HasOne(item => item.Lesson).WithMany().HasForeignKey(item => item.LessonId);
+            entity.HasOne(item => item.User).WithMany().HasForeignKey(item => item.UserId);
         });
         builder.Entity<RefreshToken>(entity =>
         {

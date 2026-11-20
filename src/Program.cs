@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
+using Microsoft.Extensions.Caching.Hybrid;
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -71,6 +72,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     };
 });
 
+builder.Services.AddHybridCache(opts =>
+{
+    opts.DefaultEntryOptions = new HybridCacheEntryOptions()
+    {
+        Expiration = TimeSpan.FromMinutes(10),
+        LocalCacheExpiration = TimeSpan.FromMinutes(10),
+
+    };
+
+    opts.ReportTagMetrics = true;
+
+});
+var cacheConnectionString = builder.Configuration["CacheConnectionString"];
+if (!string.IsNullOrWhiteSpace(cacheConnectionString))
+{
+    builder.Services.AddStackExchangeRedisCache(options => options.Configuration = cacheConnectionString);
+}
 
 builder.Services.AddAuthorization(authOpts =>
 {
@@ -91,7 +109,8 @@ builder.Services.AddScoped<IAuthorizationHandler, LessonOwnerHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, AdminPublishHandler>();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
-builder.Services.AddScoped<ICatalogService, CatalogService>();
+builder.Services.AddScoped<CatalogService>();
+builder.Services.AddScoped<ICatalogService, CachedCatalogService>();
 builder.Services.AddScoped<LessonRegistrationService>();
 builder.Services.AddOpenApi();
 

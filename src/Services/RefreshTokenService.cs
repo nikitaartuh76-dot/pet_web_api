@@ -17,7 +17,7 @@ namespace ASP_FINAL_PROJECT
         }
         public async Task<IEnumerable<RefreshToken>?> GetActiveRefreshTokensAsync(string UserId)
         {
-            return db.RefreshTokens.AsNoTracking().Where(t => t.UserId == UserId && t.UsedAt == null);
+            return db.RefreshTokens.AsNoTracking().Where(t => t.UserId == UserId && t.UsedAt == null && t.RevokedAt == null);
 
         }
         public async Task<IEnumerable<RefreshToken>?> GetAllUserTokensAsync(string UserId)
@@ -124,7 +124,7 @@ namespace ASP_FINAL_PROJECT
         {
             var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken)));
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-
+            
             var oldToken = await db.RefreshTokens.AsNoTracking().FirstOrDefaultAsync(t => t.TokenHash == hash, cancellationToken);
             if (oldToken is null) return false;
             var sessionId = oldToken.SessionId;

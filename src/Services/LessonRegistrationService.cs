@@ -62,6 +62,11 @@ public sealed class LessonRegistrationService(AppDbContext dbContext)
             .Where(item => item.UserId == userId).OrderBy(item => item.Lesson.StartDate)
             .ToListAsync(cancellationToken);
     }
+    public  Task<List<LessonRegistry>> GetUpcomingUserRegistrationsAsync(string userId, CancellationToken token)
+    {
+        return dbContext.LessonRegistrations.AsNoTracking().Where(lr => lr.UserId == userId
+        && lr.Status == RegistrationStatus.Registered && lr.Lesson.StartDate >= DateTime.UtcNow && lr.Lesson.Status == LessonStatus.Published).Include(item => item.Lesson).ToListAsync(token);
+    }
     public Task<List<ApplicationUser>> GetAllUsersFromLesson(Guid lessonId, CancellationToken cancellationToken)
     {
         return dbContext.LessonRegistrations.AsNoTracking()

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
 
-namespace ASP_FINAL_PROJECT.Entities;
+namespace ASP_FINAL_PROJECT;
 
 public class Lesson
 {

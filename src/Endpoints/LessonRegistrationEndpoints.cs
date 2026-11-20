@@ -87,7 +87,7 @@ public static class LessonRegistrationEndpoints
             var users = registrations.Select(registration => new { UserId = registration.Id, UserName = registration.UserName });
             return Results.Ok(users);
         }).RequireAuthorization();
-        group.MapDelete("/lessons/{id:guid}/registrations/{userId}", async (Guid id, string userID ,IAuthorizationService auth, LessonRegistrationService service, ClaimsPrincipal user, ICatalogService catalog,
+        group.MapDelete("/lessons/{id:guid}/registrations/{userId}", async (Guid id, string userID, IAuthorizationService auth, LessonRegistrationService service, ClaimsPrincipal user, ICatalogService catalog,
             CancellationToken token) =>
         {
             var lesson = await catalog.GetLessonForManagementAsync(id, token);
@@ -95,19 +95,31 @@ public static class LessonRegistrationEndpoints
             var ownerResult = await auth.AuthorizeAsync(user, lesson, "LessonOwner");
             var adminResult = await auth.AuthorizeAsync(user, "AdminPublish");
             if (!ownerResult.Succeeded && !adminResult.Succeeded) return Results.Forbid();
-            try { 
-              await service.CancelRegistrationAsync(id, userID, token);
+            try
+            {
+                await service.CancelRegistrationAsync(id, userID, token);
                 return Results.NoContent();
             }
-            catch(KeyNotFoundException ex)
+            catch (KeyNotFoundException ex)
             {
                 return Results.NotFound(ex.Message);
             }
-            catch(InvalidOperationException ex)
+            catch (InvalidOperationException ex)
             {
                 return Results.Conflict(ex.Message);
             }
-        }).RequireAuthorization();
+        });
+        group.MapGet("/lessons/registrations/me/upcoming", async (HttpContext ctx, LessonRegistrationService service, CancellationToken token) =>
+        {
+            var userId = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if(userId is null) return Results.Unauthorized();
+            var userLessons = await service.GetUpcomingUserRegistrationsAsync(userId, token);
+            var lessons =  userLessons.Select(lr => new {LessonName = lr.Lesson.Name, StartDate = lr.Lesson.StartDate, 
+                Address = lr.Lesson.Address,
+                EndDate = lr.Lesson.EndDate,
+            }).ToList();
+            return Results.Ok(lessons);
+        });
         return group;
     }
 }

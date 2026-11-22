@@ -1,17 +1,18 @@
 using ASP_FINAL_PROJECT;
 using ASP_FINAL_PROJECT.Data;
 using ASP_FINAL_PROJECT.Endpoints;
-using ASP_FINAL_PROJECT.Entities;
+using ASP_FINAL_PROJECT.Metrics;
 using ASP_FINAL_PROJECT.Services;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using Serilog;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Metrics;
+using Serilog;
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -33,9 +34,15 @@ builder.Services
     .AddDefaultTokenProviders();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<RefreshTokenService>();
+var seqUrl = builder.Configuration["SeqConnectionString"];
 builder.Host.UseSerilog((ctx, config) =>
 {
     config.ReadFrom.Configuration(ctx.Configuration.GetSection("Serilog"));
+    config.WriteTo.Console();
+    if (!string.IsNullOrWhiteSpace(seqUrl))
+    {
+        config.WriteTo.Seq(seqUrl);
+    }
 });
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -90,6 +97,12 @@ if (!string.IsNullOrWhiteSpace(cacheConnectionString))
     builder.Services.AddStackExchangeRedisCache(options => options.Configuration = cacheConnectionString);
 }
 
+builder.Services.AddOpenTelemetry().WithMetrics(builder =>
+{
+    builder.AddMeter(CatalogDbMetrics.MeterName, "Microsoft.AspNetCore.Hosting").AddPrometheusExporter();
+
+});
+
 builder.Services.AddAuthorization(authOpts =>
 {
     authOpts.AddPolicy("OrganizerOnly", policy => policy.RequireRole("Organizer"));
@@ -105,6 +118,7 @@ builder.Services.AddAuthorization(authOpts =>
         policyBuilder.RequireAuthenticatedUser();
     });
 });
+builder.Services.AddSingleton<CatalogDbMetrics>();
 builder.Services.AddScoped<IAuthorizationHandler, LessonOwnerHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, AdminPublishHandler>();
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -114,9 +128,14 @@ builder.Services.AddScoped<ICatalogService, CachedCatalogService>();
 builder.Services.AddScoped<LessonRegistrationService>();
 builder.Services.AddOpenApi();
 
+builder.Services.AddHealthChecks()
+    .AddNpgSql(connectionString)
+    .AddRedis(cacheConnectionString!);
+   
+
 var app = builder.Build();
 
-
+app.UseSerilogRequestLogging();
 app.UseAuthentication();
 app.Use(async (context, next) =>
 {
@@ -138,9 +157,27 @@ app.Use(async (context, next) =>
 });
 app.UseAuthorization();
 
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false
+});
+app.MapHealthChecks("/health/ready", new HealthCheckOptions()
+{
+    ResponseWriter =  async (context, response) =>
+    {
+        var status = response.Status.ToString();
+        var checks = response.Entries.ToDictionary(
+            entry => entry.Key,
+            entry => entry.Value.Status.ToString());
+        await context.Response.WriteAsJsonAsync(new { status = status, checks = checks });
+    }
+});
+
+app.MapPrometheusScrapingEndpoint();
 app.MapOpenApi();
 app.MapCatalogEndpoints();
 app.MapLessonRegistrationEndpoints();
 app.MapAuth();
 
 app.Run();
+

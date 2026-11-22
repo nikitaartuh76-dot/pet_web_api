@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using ASP_FINAL_PROJECT.DTOS;
 using Microsoft.Extensions.Caching.Hybrid;
 
@@ -22,8 +23,13 @@ public sealed class CachedCatalogService(CatalogService inner, HybridCache cache
     public async Task<IReadOnlyList<Lesson>?> GetLessonsAsync(DateTime? from, DateTime? to, CancellationToken cancellationToken)
     {
         var key = $"catalog:lessons:list:{from?.ToString("O", System.Globalization.CultureInfo.InvariantCulture) ?? "null"}:{to?.ToString("O", System.Globalization.CultureInfo.InvariantCulture) ?? "null"}";
+        var parentActivityId = Activity.Current?.Id;
         var lessons = await cache.GetOrCreateAsync<IReadOnlyList<Lesson>?>(key, async (cancellationToken) =>
         {
+            // HybridCache can invoke the factory without the caller's activity.
+            using var activity = Activity.Current is null && parentActivityId is not null
+                ? new Activity("Catalog.List.CacheFill").SetParentId(parentActivityId).Start()
+                : null;
             var lessons = await inner.GetLessonsAsync(from, to, cancellationToken);
             return lessons;
         }, cancellationToken: cancellationToken, tags: [LessonListTag]);

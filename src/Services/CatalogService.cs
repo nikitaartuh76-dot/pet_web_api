@@ -1,11 +1,13 @@
+using System.Diagnostics;
 using ASP_FINAL_PROJECT.Data;
 using ASP_FINAL_PROJECT.DTOS;
 using ASP_FINAL_PROJECT.Entities;
+using ASP_FINAL_PROJECT.Metrics;
 using Microsoft.EntityFrameworkCore;
 
 namespace ASP_FINAL_PROJECT.Services;
 
-public sealed class CatalogService(AppDbContext dbContext) : ICatalogService
+public sealed class CatalogService(AppDbContext dbContext, CatalogDbMetrics metrics, ILogger<CatalogService> logger) : ICatalogService
 {
     public async Task<IReadOnlyList<Lesson>> GetLessonsAsync(
         DateTime? from,
@@ -13,8 +15,8 @@ public sealed class CatalogService(AppDbContext dbContext) : ICatalogService
         CancellationToken cancellationToken)
     {
         IQueryable<Lesson> query = dbContext.Lessons.AsNoTracking();
-        
 
+     
         if (from.HasValue)
         {
             query = query.Where(lesson => lesson.StartDate >= from.Value);
@@ -24,12 +26,17 @@ public sealed class CatalogService(AppDbContext dbContext) : ICatalogService
         {
             query = query.Where(lesson => lesson.StartDate < to.Value);
         }
-
-        return await query
+        var started = Stopwatch.GetTimestamp();
+        var lessons = await query
             .Where(lesson => lesson.Status == LessonStatus.Published)
             .OrderBy(lesson => lesson.StartDate)
             .ThenBy(lesson => lesson.Id)
             .ToListAsync(cancellationToken);
+        var elapsed = Stopwatch.GetElapsedTime(started);
+        logger.LogInformation("Запрос в PostgreSQL занял {EllapsedTime} мс", elapsed.TotalMilliseconds);
+        metrics.CountListRead();
+        metrics.RecordListReadDuration(elapsed);
+        return lessons;
     }
     public Task<Lesson?> GetLessonForManagementAsync(Guid id, CancellationToken token)
     {
@@ -38,6 +45,7 @@ public sealed class CatalogService(AppDbContext dbContext) : ICatalogService
     }
     public Task<Lesson?> GetLessonAsync(Guid id, CancellationToken cancellationToken)
     {
+        
         return dbContext.Lessons
             .AsNoTracking()
             .FirstOrDefaultAsync(

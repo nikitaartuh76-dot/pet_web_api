@@ -5,7 +5,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ASP_FINAL_PROJECT.Services;
 
-public sealed class LessonRegistrationService(AppDbContext dbContext)
+public sealed class LessonRegistrationService(
+    AppDbContext dbContext, ILogger<LessonRegistrationService> logger)
 {
     public async Task RegisterAsync(Guid lessonId, string userId, CancellationToken cancellationToken)
     {
@@ -36,6 +37,7 @@ public sealed class LessonRegistrationService(AppDbContext dbContext)
         registration.CancelledAt = null;
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        logger.LogInformation("Registration confirmed for lesson {LessonId} and user {UserId}", lessonId, userId);
     }
 
     public async Task CancelRegistrationAsync(Guid lessonId, string userId, CancellationToken cancellationToken)
@@ -53,6 +55,7 @@ public sealed class LessonRegistrationService(AppDbContext dbContext)
         registration.CancelledAt = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        logger.LogInformation("Registration cancelled for lesson {LessonId} and user {UserId}", lessonId, userId);
     }
 
     public Task<List<LessonRegistry>> GetUserRegistrationsAsync(string userId, CancellationToken cancellationToken)

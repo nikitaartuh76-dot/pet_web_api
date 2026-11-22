@@ -28,7 +28,7 @@ public static class CatalogEndpoints
 
             var lessons = await catalog.GetLessonsAsync(from, to, cancellationToken);
             return Results.Ok(lessons);
-        });
+        }).AllowAnonymous();
 
         group.MapGet("/lessons/{id:guid}", async (
             Guid id,

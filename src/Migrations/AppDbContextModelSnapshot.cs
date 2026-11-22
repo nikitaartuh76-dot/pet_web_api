@@ -86,7 +86,33 @@ namespace ASP_FINAL_PROJECT.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
-            modelBuilder.Entity("ASP_FINAL_PROJECT.Entities.Lesson", b =>
+            modelBuilder.Entity("ASP_FINAL_PROJECT.Entities.LessonRegistry", b =>
+                {
+                    b.Property<Guid>("LessonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("RegisteredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("LessonId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("LessonRegistrations");
+                });
+
+            modelBuilder.Entity("ASP_FINAL_PROJECT.Lesson", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -145,32 +171,6 @@ namespace ASP_FINAL_PROJECT.Migrations
                     b.HasIndex("Status", "StartDate");
 
                     b.ToTable("Lessons");
-                });
-
-            modelBuilder.Entity("ASP_FINAL_PROJECT.Entities.LessonRegistry", b =>
-                {
-                    b.Property<Guid>("LessonId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("UserId")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("CancelledAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("RegisteredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.HasKey("LessonId", "UserId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("LessonRegistrations");
                 });
 
             modelBuilder.Entity("ASP_FINAL_PROJECT.RefreshToken", b =>
@@ -334,7 +334,26 @@ namespace ASP_FINAL_PROJECT.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("ASP_FINAL_PROJECT.Entities.Lesson", b =>
+            modelBuilder.Entity("ASP_FINAL_PROJECT.Entities.LessonRegistry", b =>
+                {
+                    b.HasOne("ASP_FINAL_PROJECT.Lesson", "Lesson")
+                        .WithMany()
+                        .HasForeignKey("LessonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ASP_FINAL_PROJECT.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Lesson");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ASP_FINAL_PROJECT.Lesson", b =>
                 {
                     b.HasOne("ASP_FINAL_PROJECT.ApplicationUser", "Creator")
                         .WithMany()
@@ -351,25 +370,6 @@ namespace ASP_FINAL_PROJECT.Migrations
                     b.Navigation("Creator");
 
                     b.Navigation("Host");
-                });
-
-            modelBuilder.Entity("ASP_FINAL_PROJECT.Entities.LessonRegistry", b =>
-                {
-                    b.HasOne("ASP_FINAL_PROJECT.Entities.Lesson", "Lesson")
-                        .WithMany()
-                        .HasForeignKey("LessonId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ASP_FINAL_PROJECT.ApplicationUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Lesson");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("ASP_FINAL_PROJECT.RefreshToken", b =>

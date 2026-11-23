@@ -12,10 +12,10 @@ EXPOSE 8081
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["ASP_FINAL_PROJECT/ASP_FINAL_PROJECT.csproj", "ASP_FINAL_PROJECT/"]
-RUN dotnet restore "./ASP_FINAL_PROJECT/ASP_FINAL_PROJECT.csproj"
+COPY ["src/ASP_FINAL_PROJECT.csproj", "src/"]
+RUN dotnet restore "./src/ASP_FINAL_PROJECT.csproj"
 COPY . .
-WORKDIR "/src/ASP_FINAL_PROJECT"
+WORKDIR "/src/src"
 RUN dotnet build "./ASP_FINAL_PROJECT.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 # Этот этап используется для публикации проекта службы, который будет скопирован на последний этап

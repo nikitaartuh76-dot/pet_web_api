@@ -128,18 +128,9 @@ builder.Services.AddScoped<ICatalogService, CachedCatalogService>();
 builder.Services.AddScoped<LessonRegistrationService>();
 builder.Services.AddOpenApi();
 
-
-if(!string.IsNullOrWhiteSpace(cacheConnectionString)){
 builder.Services.AddHealthChecks()
     .AddNpgSql(connectionString)
-    .AddRedis(cacheConnectionString);
-}
-else
-{
-    builder.Services.AddHealthChecks()
-    .AddNpgSql(connectionString);
-}
-    
+    .AddRedis(cacheConnectionString!);
    
 
 var app = builder.Build();
